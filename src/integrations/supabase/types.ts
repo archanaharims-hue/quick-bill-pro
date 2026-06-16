@@ -130,41 +130,8 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "upi_accounts"
             referencedColumns: ["id"]
-          }
+          },
         ]
-      }
-      upi_accounts: {
-        Row: {
-          created_at: string
-          id: string
-          is_default: boolean
-          label: string | null
-          payee_name: string | null
-          sort_order: number
-          upi_id: string | null
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          is_default?: boolean
-          label?: string | null
-          payee_name?: string | null
-          sort_order?: number
-          upi_id?: string | null
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          is_default?: boolean
-          label?: string | null
-          payee_name?: string | null
-          sort_order?: number
-          upi_id?: string | null
-          user_id?: string
-        }
-        Relationships: []
       }
       categories: {
         Row: {
@@ -255,7 +222,6 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
-          bill_format: Json | null
           created_at: string
           display_name: string | null
           id: string
@@ -264,7 +230,6 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
-          bill_format?: Json | null
           created_at?: string
           display_name?: string | null
           id: string
@@ -273,12 +238,44 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
-          bill_format?: Json | null
           created_at?: string
           display_name?: string | null
           id?: string
           shop_name?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      upi_accounts: {
+        Row: {
+          created_at: string
+          id: string
+          is_default: boolean
+          label: string | null
+          payee_name: string | null
+          sort_order: number
+          upi_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          label?: string | null
+          payee_name?: string | null
+          sort_order?: number
+          upi_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          label?: string | null
+          payee_name?: string | null
+          sort_order?: number
+          upi_id?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -308,10 +305,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      database_size_bytes: {
-        Args: Record<PropertyKey, never>
-        Returns: number
-      }
+      database_size_bytes: { Args: never; Returns: number }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -319,10 +313,7 @@ export type Database = {
         }
         Returns: boolean
       }
-      storage_usage_bytes: {
-        Args: Record<PropertyKey, never>
-        Returns: number
-      }
+      storage_usage_bytes: { Args: never; Returns: number }
     }
     Enums: {
       app_role: "admin" | "cashier"
