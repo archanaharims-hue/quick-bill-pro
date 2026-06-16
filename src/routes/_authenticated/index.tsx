@@ -1,0 +1,235 @@
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth-context";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+import { CategoryFormDialog, type CategoryRow } from "@/components/category-form-dialog";
+import { Plus, Pencil, Trash2, LogOut, FileSpreadsheet, ImageIcon, Package, Settings, Receipt } from "lucide-react";
+import { useLongPress } from "@/hooks/use-long-press";
+import { toast } from "sonner";
+import * as XLSX from "xlsx";
+
+export const Route = createFileRoute("/_authenticated/")({
+  head: () => ({
+    meta: [{ title: "Categories — Tally" }],
+  }),
+  component: Home,
+});
+
+function Home() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<CategoryRow | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const { data: categories = [], isLoading } = useQuery({
+    queryKey: ["categories", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("categories")
+        .select("id, name, image_url, sort_order")
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const onSignOut = async () => {
+    await supabase.auth.signOut();
+  };
+
+  const onDelete = async () => {
+    if (!deleteId) return;
+    const { error } = await supabase.from("categories").delete().eq("id", deleteId);
+    if (error) return toast.error(error.message);
+    toast.success("Category deleted");
+    setDeleteId(null);
+    qc.invalidateQueries({ queryKey: ["categories"] });
+  };
+
+  const exportProducts = async () => {
+    const { data, error } = await supabase
+      .from("products")
+      .select("name, price, stock_qty, unit, barcode, description, category_id, categories(name)")
+      .order("created_at", { ascending: false });
+    if (error) return toast.error(error.message);
+    const rows = (data ?? []).map((p: any) => ({
+      Category: p.categories?.name ?? "",
+      Name: p.name ?? "",
+      Price: p.price ?? "",
+      Stock: p.stock_qty ?? "",
+      Unit: p.unit ?? "",
+      Barcode: p.barcode ?? "",
+      Description: p.description ?? "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Products");
+    XLSX.writeFile(wb, `products-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    toast.success(`Exported ${rows.length} products`);
+  };
+
+  return (
+    <div className="mx-auto max-w-3xl lg:max-w-6xl">
+      <header className="sticky top-0 md:top-16 z-30 bg-background/90 backdrop-blur border-b">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 py-3">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold tracking-tight truncate">Categories</h1>
+            <p className="text-xs text-muted-foreground">Tap to view products · long-press to edit</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button size="icon" variant="ghost" asChild title="Bill history">
+              <Link to="/history"><Receipt className="h-5 w-5" /></Link>
+            </Button>
+            <Button size="icon" variant="ghost" asChild title="Settings">
+              <Link to="/settings"><Settings className="h-5 w-5" /></Link>
+            </Button>
+            <Button size="icon" variant="ghost" onClick={exportProducts} title="Export to Excel">
+              <FileSpreadsheet className="h-5 w-5" />
+            </Button>
+            <Button size="icon" variant="ghost" onClick={onSignOut} title="Sign out">
+              <LogOut className="h-5 w-5" />
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <div className="p-4">
+        {isLoading ? (
+          <SkeletonGrid />
+        ) : categories.length === 0 ? (
+          <EmptyState onAdd={() => { setEditing(null); setFormOpen(true); }} />
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+            {categories.map((c) => (
+              <CategoryCard
+                key={c.id}
+                category={c}
+                onEdit={() => { setEditing(c); setFormOpen(true); }}
+                onDelete={() => setDeleteId(c.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={() => { setEditing(null); setFormOpen(true); }}
+        className="fixed bottom-24 md:bottom-8 right-4 lg:right-[max(2rem,calc((100vw-72rem)/2+2rem))] z-40 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-pop grid place-items-center press-feedback"
+        aria-label="Add category"
+      >
+        <Plus className="h-7 w-7" />
+      </button>
+
+      <CategoryFormDialog open={formOpen} onOpenChange={setFormOpen} category={editing} />
+
+      <AlertDialog open={!!deleteId} onOpenChange={(v) => !v && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete category?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Products in this category will be kept but uncategorized.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={onDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+function CategoryCard({
+  category, onEdit, onDelete,
+}: { category: CategoryRow; onEdit: () => void; onDelete: () => void }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const lp = useLongPress(() => setMenuOpen(true));
+
+  return (
+    <div className="relative group">
+      <Link
+        to="/category/$id"
+        params={{ id: category.id }}
+        className="block rounded-2xl overflow-hidden bg-card border shadow-soft press-feedback no-select"
+        {...lp}
+      >
+        <div className="aspect-square bg-muted grid place-items-center overflow-hidden">
+          {category.image_url ? (
+            <img
+              src={category.image_url}
+              alt={category.name ?? ""}
+              loading="lazy"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <Package className="h-10 w-10 text-muted-foreground" />
+          )}
+        </div>
+        <div className="px-3 py-2">
+          <div className="font-semibold text-sm truncate">{category.name || "Unnamed"}</div>
+        </div>
+      </Link>
+      {/* Desktop affordance: long-press/double-click is the touch path; a mouse
+          user can't long-press a navigating link, so reveal an edit button on
+          hover. Hidden on phones (native + mobile web), so mobile is unchanged. */}
+      <button
+        type="button"
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuOpen(true); }}
+        className="hidden md:grid absolute top-1.5 right-1.5 z-10 h-7 w-7 place-items-center rounded-full bg-background/90 text-muted-foreground shadow opacity-0 group-hover:opacity-100 transition-opacity"
+        aria-label="Edit category"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </button>
+      {menuOpen && (
+        <div
+          className="absolute inset-0 z-10 rounded-2xl bg-background/95 border-2 border-primary grid place-items-center"
+          onClick={() => setMenuOpen(false)}
+        >
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onEdit(); }}>
+              <Pencil className="h-4 w-4 mr-1" /> Edit
+            </Button>
+            <Button size="sm" variant="destructive" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(); }}>
+              <Trash2 className="h-4 w-4 mr-1" /> Delete
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EmptyState({ onAdd }: { onAdd: () => void }) {
+  return (
+    <div className="text-center py-16 px-4">
+      <div className="mx-auto h-16 w-16 rounded-2xl bg-accent grid place-items-center mb-4">
+        <ImageIcon className="h-8 w-8 text-accent-foreground" />
+      </div>
+      <h2 className="text-lg font-semibold">No categories yet</h2>
+      <p className="text-sm text-muted-foreground mt-1">Add your first category to start building your catalog.</p>
+      <Button className="mt-4" onClick={onAdd}>
+        <Plus className="h-4 w-4 mr-1" /> Add category
+      </Button>
+    </div>
+  );
+}
+
+function SkeletonGrid() {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+      {Array.from({ length: 12 }).map((_, i) => (
+        <div key={i} className="rounded-2xl bg-muted aspect-[3/4] animate-pulse" />
+      ))}
+    </div>
+  );
+}
