@@ -4,15 +4,19 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription,
   AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { CategoryFormDialog, type CategoryRow } from "@/components/category-form-dialog";
-import { Plus, Pencil, Trash2, LogOut, FileSpreadsheet, ImageIcon, Package, Settings, Receipt } from "lucide-react";
+import { Plus, Pencil, Trash2, LogOut, FileSpreadsheet, ImageIcon, Package, Settings, Receipt, Search, X, Loader2 } from "lucide-react";
 import { useLongPress } from "@/hooks/use-long-press";
+import { useDebounce } from "@/hooks/use-debounce";
+import { useCart } from "@/lib/cart-store";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
