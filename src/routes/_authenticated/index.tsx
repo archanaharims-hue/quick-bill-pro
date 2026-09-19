@@ -70,11 +70,20 @@ function Home() {
 
   const onDelete = async () => {
     if (!deleteId) return;
+    // Unlink products first so the delete never fails on a category that
+    // still has items — they stay in the catalog as "Uncategorized".
+    const { error: unlinkError } = await supabase
+      .from("products")
+      .update({ category_id: null })
+      .eq("category_id", deleteId);
+    if (unlinkError) return toast.error(unlinkError.message);
     const { error } = await supabase.from("categories").delete().eq("id", deleteId);
     if (error) return toast.error(error.message);
     toast.success("Category deleted");
     setDeleteId(null);
     qc.invalidateQueries({ queryKey: ["categories"] });
+    qc.invalidateQueries({ queryKey: ["products"] });
+    qc.invalidateQueries({ queryKey: ["product-search"] });
   };
 
   const exportProducts = async () => {
