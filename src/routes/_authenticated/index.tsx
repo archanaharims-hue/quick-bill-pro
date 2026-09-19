@@ -31,6 +31,24 @@ function Home() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<CategoryRow | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const search = useDebounce(query, 250).trim();
+  const addToCart = useCart((s) => s.add);
+
+  const { data: results = [], isFetching: searching } = useQuery({
+    queryKey: ["product-search", user?.id, search],
+    enabled: !!user && search.length > 0,
+    queryFn: async () => {
+      const term = `%${search}%`;
+      const { data, error } = await supabase
+        .from("products")
+        .select("id, name, price, unit, thumbnail_url, image_url, category_id, categories(name)")
+        .or(`name.ilike.${term},barcode.ilike.${term}`)
+        .limit(60);
+      if (error) throw error;
+      return data as any[];
+    },
+  });
 
   const { data: categories = [], isLoading } = useQuery({
     queryKey: ["categories", user?.id],
