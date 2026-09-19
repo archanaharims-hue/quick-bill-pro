@@ -4,15 +4,19 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription,
   AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { CategoryFormDialog, type CategoryRow } from "@/components/category-form-dialog";
-import { Plus, Pencil, Trash2, LogOut, FileSpreadsheet, ImageIcon, Package, Settings, Receipt } from "lucide-react";
+import { Plus, Pencil, Trash2, LogOut, FileSpreadsheet, ImageIcon, Package, Settings, Receipt, Search, X, Loader2 } from "lucide-react";
 import { useLongPress } from "@/hooks/use-long-press";
+import { useDebounce } from "@/hooks/use-debounce";
+import { useCart } from "@/lib/cart-store";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
@@ -27,6 +31,24 @@ function Home() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<CategoryRow | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const search = useDebounce(query, 250).trim();
+  const addToCart = useCart((s) => s.add);
+
+  const { data: results = [], isFetching: searching } = useQuery({
+    queryKey: ["product-search", user?.id, search],
+    enabled: !!user && search.length > 0,
+    queryFn: async () => {
+      const term = `%${search}%`;
+      const { data, error } = await supabase
+        .from("products")
+        .select("id, name, price, unit, thumbnail_url, image_url, category_id, categories(name)")
+        .or(`name.ilike.${term},barcode.ilike.${term}`)
+        .limit(60);
+      if (error) throw error;
+      return data as any[];
+    },
+  });
 
   const { data: categories = [], isLoading } = useQuery({
     queryKey: ["categories", user?.id],
@@ -100,10 +122,74 @@ function Home() {
             </Button>
           </div>
         </div>
+        <div className="px-4 pb-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search all products by name or barcode"
+              className="pl-9 pr-9 rounded-full bg-muted/60 border-transparent focus-visible:bg-card"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
       </header>
 
       <div className="p-4">
-        {isLoading ? (
+        {search ? (
+          searching && results.length === 0 ? (
+            <div className="grid place-items-center py-20">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : results.length === 0 ? (
+            <div className="text-center py-20">
+              <h2 className="font-semibold">No products found</h2>
+              <p className="text-sm text-muted-foreground mt-1">Try a different name or barcode.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+              {results.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    addToCart({ productId: p.id, name: p.name ?? "Unnamed", price: Number(p.price ?? 0) });
+                    toast.success("Added to bill", { duration: 1200 });
+                  }}
+                  className="text-left rounded-2xl overflow-hidden bg-card border shadow-soft press-feedback no-select"
+                >
+                  <div className="aspect-square bg-muted overflow-hidden">
+                    {p.thumbnail_url || p.image_url ? (
+                      <img src={p.thumbnail_url ?? p.image_url} loading="lazy" decoding="async" alt={p.name ?? ""} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="h-full w-full grid place-items-center">
+                        <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="px-2.5 py-2">
+                    <div className="text-sm font-medium truncate">{p.name || "Unnamed item"}</div>
+                    <div className="text-sm font-bold text-primary">
+                      {p.price != null ? `₹${Number(p.price).toFixed(2)}` : "—"}
+                      {p.unit && <span className="text-[10px] font-normal text-muted-foreground ml-1">/{p.unit}</span>}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground truncate">{p.categories?.name ?? "Uncategorized"}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )
+        ) : isLoading ? (
           <SkeletonGrid />
         ) : categories.length === 0 ? (
           <EmptyState onAdd={() => { setEditing(null); setFormOpen(true); }} />
@@ -120,6 +206,7 @@ function Home() {
           </div>
         )}
       </div>
+
 
       <button
         onClick={() => { setEditing(null); setFormOpen(true); }}
