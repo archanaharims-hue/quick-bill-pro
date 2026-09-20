@@ -20,6 +20,10 @@ export default defineConfig(({ mode }) => {
   return {
     server: { host: "::", port: 8080 },
     css: { transformer: "lightningcss" },
+    // The deployed server runs in a Worker with no runtime module resolution,
+    // so every dependency must be bundled into the server output.
+    ssr: { noExternal: true },
+
     resolve: {
       alias: {
         "@": `${process.cwd()}/src`,
