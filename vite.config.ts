@@ -14,12 +14,18 @@ import viteReact from "@vitejs/plugin-react";
 //   - `vite build --mode mobile`  -> static SPA build with a prerendered
 //                                    index.html in dist/client, used to package
 //                                    the native Android (Capacitor) app.
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   const isMobile = mode === "mobile";
 
   return {
     server: { host: "::", port: 8080 },
     css: { transformer: "lightningcss" },
+    // The deployed server runs in a Worker with no runtime module resolution,
+    // so every dependency must be bundled into the built server output.
+    // Dev keeps Vite's default externalization (inlining CJS deps breaks it).
+    ...(command === "build" ? { ssr: { noExternal: true } } : {}),
+
+
     resolve: {
       alias: {
         "@": `${process.cwd()}/src`,
