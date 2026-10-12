@@ -11,7 +11,9 @@ import { useCompany } from "@/lib/company-store";
 import { useBiometric } from "@/lib/biometric-store";
 import { biometricAvailable, unlockWithBiometric } from "@/lib/biometric";
 import { toast } from "sonner";
-import { Loader2, ShoppingBag, Fingerprint } from "lucide-react";
+import { Loader2, ShoppingBag, Fingerprint, KeyRound } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { loginWithPasskey } from "@/lib/passkeys.functions";
 
 // Neutral default tagline (no hardcoded marketing line / no "Tally").
 const DEFAULT_TAGLINE = "Billing, made simple.";
@@ -41,6 +43,25 @@ function AuthPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [bioReady, setBioReady] = useState(false);
+  const [code, setCode] = useState("");
+  const [showEmail, setShowEmail] = useState(false);
+  const loginFn = useServerFn(loginWithPasskey);
+
+  const onPasskey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const { tokenHash } = await loginFn({ data: { code } });
+      const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "magiclink" });
+      if (error) throw error;
+      setUnlocked(true);
+      navigate({ to: "/" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Wrong passkey");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // Biometric unlock is APK-only and only offered once it's been enabled.
   useEffect(() => {
@@ -103,6 +124,28 @@ function AuthPage() {
           </div>
         </div>
         <div className="rounded-3xl border bg-card p-5 shadow-soft">
+          {!showEmail ? (
+            <form className="space-y-3" onSubmit={onPasskey}>
+              <div>
+                <Label>Passkey</Label>
+                <Input
+                  type="password"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="Enter your passkey"
+                  autoFocus
+                  required
+                  className="text-center text-lg tracking-widest h-12"
+                />
+              </div>
+              <Button type="submit" className="w-full h-11" disabled={busy}>
+                {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <KeyRound className="h-4 w-4 mr-1" />} Unlock
+              </Button>
+              <button type="button" className="w-full text-xs text-muted-foreground underline" onClick={() => setShowEmail(true)}>
+                Admin sign in with email
+              </button>
+            </form>
+          ) : (
           <Tabs defaultValue="signin">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="signin">Sign in</TabsTrigger>
@@ -126,7 +169,11 @@ function AuthPage() {
                 </Button>
               </form>
             </TabsContent>
+            <button type="button" className="mt-3 w-full text-xs text-muted-foreground underline" onClick={() => setShowEmail(false)}>
+              Use passkey instead
+            </button>
           </Tabs>
+          )}
         </div>
 
         {bioReady && (

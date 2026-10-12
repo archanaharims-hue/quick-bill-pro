@@ -14,6 +14,7 @@ import { Plus, Pencil, Trash2, LogOut, FileSpreadsheet, ImageIcon, Package, Sett
 import { useLongPress } from "@/hooks/use-long-press";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useCart } from "@/lib/cart-store";
+import { useDisplay } from "@/lib/display-store";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
@@ -250,6 +251,7 @@ function CategoryCard({
 }: { category: CategoryRow; onEdit: () => void; onDelete: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const lp = useLongPress(() => setMenuOpen(true));
+  const nameOnly = useDisplay((s) => s.categoryNameOnly);
 
   return (
     <div className="relative group">
@@ -259,21 +261,24 @@ function CategoryCard({
         className="block rounded-2xl overflow-hidden bg-card border shadow-soft press-feedback no-select"
         {...lp}
       >
-        <div className="aspect-square bg-muted grid place-items-center overflow-hidden">
-          {category.image_url ? (
-            <img
-              src={category.image_url}
-              alt={category.name ?? ""}
-              loading="lazy"
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <Package className="h-10 w-10 text-muted-foreground" />
-          )}
-        </div>
-        <div className="px-3 py-2">
-          <div className="font-semibold text-sm truncate">{category.name || "Unnamed"}</div>
-        </div>
+        {nameOnly ? (
+          <div className="min-h-20 px-3 py-4 grid place-items-center text-center">
+            <div className="font-semibold text-sm line-clamp-2">{category.name || "Unnamed"}</div>
+          </div>
+        ) : (
+          <>
+            <div className="aspect-square bg-muted grid place-items-center overflow-hidden">
+              {category.image_url ? (
+                <img src={category.image_url} alt={category.name ?? ""} loading="lazy" className="h-full w-full object-cover" />
+              ) : (
+                <Package className="h-10 w-10 text-muted-foreground" />
+              )}
+            </div>
+            <div className="px-3 py-2">
+              <div className="font-semibold text-sm truncate">{category.name || "Unnamed"}</div>
+            </div>
+          </>
+        )}
       </Link>
       {/* Desktop affordance: long-press/double-click is the touch path; a mouse
           user can't long-press a navigating link, so reveal an edit button on

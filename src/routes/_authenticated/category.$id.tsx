@@ -11,6 +11,8 @@ import { useDebounce } from "@/hooks/use-debounce";
 import { ProductFormDialog, type ProductRow } from "@/components/product-form-dialog";
 import { QuickEditProduct } from "@/components/quick-edit-product";
 import { useCart, selectCartCount } from "@/lib/cart-store";
+import { useDisplay } from "@/lib/display-store";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription,
@@ -230,45 +232,101 @@ function ProductCard({
   onDelete: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [dx, setDx] = useState(0);
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const swiped = useRef(false);
   const add = useCart((s) => s.add);
+  const nameOnly = useDisplay((s) => s.productNameOnly);
   const lp = useLongPress(() => onLongPress());
+  const img = product.thumbnail_url || product.image_url;
+
+  const addToCart = () => {
+    add({ productId: product.id, name: product.name ?? "Unnamed", price: Number(product.price ?? 0) });
+    toast.success(`${product.name || "Item"} added`, { duration: 1000 });
+  };
 
   return (
     <div className="relative">
+      <div className="absolute inset-0 rounded-2xl bg-primary/15 grid place-items-center text-primary text-xs font-semibold">
+        <span className="flex items-center gap-1"><ShoppingCart className="h-4 w-4" /> Add</span>
+      </div>
       <button
         type="button"
         {...lp}
+        style={{ transform: `translateX(${dx}px)`, touchAction: "pan-y", transition: start.current ? "none" : "transform .2s" }}
+        onPointerDown={(e) => {
+          lp.onPointerDown(e);
+          start.current = { x: e.clientX, y: e.clientY };
+          swiped.current = false;
+        }}
+        onPointerMove={(e) => {
+          if (!start.current) return;
+          const mx = e.clientX - start.current.x;
+          const my = e.clientY - start.current.y;
+          if (Math.abs(mx) > 10 && Math.abs(mx) > Math.abs(my)) {
+            lp.onPointerCancel();
+            setDx(Math.max(-90, Math.min(90, mx)));
+          }
+        }}
+        onPointerUp={() => {
+          lp.onPointerUp();
+          if (Math.abs(dx) > 50) { swiped.current = true; addToCart(); }
+          start.current = null;
+          setDx(0);
+        }}
+        onPointerCancel={() => { lp.onPointerCancel(); start.current = null; setDx(0); }}
         onClick={(e) => {
           lp.onClick(e);
-          if (e.defaultPrevented) return;
-          add({ productId: product.id, name: product.name ?? "Unnamed", price: Number(product.price ?? 0) });
-          toast.success("Added to bill", { duration: 1200 });
+          if (e.defaultPrevented || swiped.current) { swiped.current = false; return; }
+          setDetailOpen(true);
         }}
-        className="w-full text-left rounded-2xl overflow-hidden bg-card border shadow-soft press-feedback no-select"
+        className="relative w-full text-left rounded-2xl overflow-hidden bg-card border shadow-soft no-select"
       >
-        <div className="aspect-square bg-muted overflow-hidden">
-          {product.thumbnail_url || product.image_url ? (
-            <img
-              src={product.thumbnail_url ?? product.image_url ?? ""}
-              loading="lazy"
-              decoding="async"
-              alt={product.name ?? ""}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="h-full w-full grid place-items-center">
-              <ImageIcon className="h-8 w-8 text-muted-foreground" />
-            </div>
-          )}
-        </div>
-        <div className="px-2.5 py-2">
-          <div className="text-sm font-medium truncate">{product.name || "Unnamed item"}</div>
+        {!nameOnly && (
+          <div className="aspect-square bg-muted overflow-hidden">
+            {img ? (
+              <img src={img} loading="lazy" decoding="async" alt={product.name ?? ""} className="h-full w-full object-cover" draggable={false} />
+            ) : (
+              <div className="h-full w-full grid place-items-center">
+                <ImageIcon className="h-8 w-8 text-muted-foreground" />
+              </div>
+            )}
+          </div>
+        )}
+        <div className={nameOnly ? "px-3 py-3 pr-9" : "px-2.5 py-2"}>
+          <div className={nameOnly ? "text-sm font-medium line-clamp-2" : "text-sm font-medium truncate"}>{product.name || "Unnamed item"}</div>
           <div className="text-sm font-bold text-primary">
             {product.price != null ? `₹${Number(product.price).toFixed(2)}` : "—"}
             {product.unit && <span className="text-[10px] font-normal text-muted-foreground ml-1">/{product.unit}</span>}
           </div>
         </div>
       </button>
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-md p-0 overflow-hidden">
+          {product.image_url || product.thumbnail_url ? (
+            <img src={product.image_url ?? product.thumbnail_url ?? ""} alt={product.name ?? ""} className="w-full max-h-[60dvh] object-contain bg-muted" />
+          ) : null}
+          <div className="p-4 space-y-3">
+            <DialogHeader>
+              <DialogTitle>{product.name || "Unnamed item"}</DialogTitle>
+            </DialogHeader>
+            <div className="text-2xl font-bold text-primary">
+              {product.price != null ? `₹${Number(product.price).toFixed(2)}` : "—"}
+              {product.unit && <span className="text-sm font-normal text-muted-foreground ml-1">/{product.unit}</span>}
+            </div>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+              {product.barcode && (<><dt className="text-muted-foreground">Barcode</dt><dd>{product.barcode}</dd></>)}
+              {product.stock_qty != null && (<><dt className="text-muted-foreground">Stock</dt><dd>{product.stock_qty}</dd></>)}
+              {product.unit && (<><dt className="text-muted-foreground">Unit</dt><dd>{product.unit}</dd></>)}
+            </dl>
+            {product.description && <p className="text-sm text-muted-foreground whitespace-pre-wrap">{product.description}</p>}
+            <Button className="w-full" onClick={() => { addToCart(); setDetailOpen(false); }}>
+              <ShoppingCart className="h-4 w-4 mr-1" /> Add to bill
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
