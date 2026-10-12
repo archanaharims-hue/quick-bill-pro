@@ -163,6 +163,30 @@ export type Database = {
         }
         Relationships: []
       }
+      passkeys: {
+        Row: {
+          code_hash: string
+          created_at: string
+          id: string
+          label: string
+          owner_id: string
+        }
+        Insert: {
+          code_hash: string
+          created_at?: string
+          id?: string
+          label: string
+          owner_id: string
+        }
+        Update: {
+          code_hash?: string
+          created_at?: string
+          id?: string
+          label?: string
+          owner_id?: string
+        }
+        Relationships: []
+      }
       products: {
         Row: {
           barcode: string | null
