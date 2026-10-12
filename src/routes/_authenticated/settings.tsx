@@ -24,6 +24,7 @@ import { buildUpiUri } from "@/lib/upi";
 import { UpiQR } from "@/components/upi-qr";
 import { ImagePicker } from "@/components/image-picker";
 import { BillFormatSection } from "@/components/bill-format-settings";
+import { DisplaySection, PasskeySection } from "@/components/display-passkey-settings";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -59,6 +60,8 @@ function SettingsPage() {
       </header>
 
       <div className="p-4 space-y-4">
+        <DisplaySection />
+        <PasskeySection />
         <BillFormatSection />
 
         <section className="rounded-2xl border bg-card overflow-hidden">
